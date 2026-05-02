@@ -72,6 +72,32 @@ class SMCDetection:
                 
         return df
         
+    def detect_liquidity_sweep(self, df: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+        logger.info("Detecting Liquidity Sweep...")
+        df['bullish_liquidity_sweep'] = False
+        
+        last_sl = pd.Series(np.nan, index=df.index)
+        swing_low_indices = df[df['swing_low']].index
+        
+        for idx in swing_low_indices:
+            loc = df.index.get_loc(idx)
+            confirm_loc = min(loc + window, len(df) - 1)
+            confirm_idx = df.index[confirm_loc]
+            last_sl.iloc[confirm_loc:] = df.at[idx, 'Low']
+            
+        df['last_swing_low'] = last_sl
+        
+        # Condition 1: Low is below last_swing_low in recent bars
+        sweep_0 = df['Low'] < df['last_swing_low']
+        sweep_1 = df['Low'].shift(1) < df['last_swing_low']
+        sweep_2 = df['Low'].shift(2) < df['last_swing_low']
+        
+        # Condition 2: Close reclaims last_swing_low
+        reclaimed = df['Close'] >= df['last_swing_low']
+        
+        df.loc[reclaimed & (sweep_0 | sweep_1 | sweep_2), 'bullish_liquidity_sweep'] = True
+        return df
+
     def process_all_timeframes(self, tf_data: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
         logger.info("Running SMC Detection on all timeframes")
         processed_data = {}
@@ -79,6 +105,7 @@ class SMCDetection:
             df = df.copy()
             df = self.detect_fvg(df)
             df = self.detect_swing_high_low(df, window=5)
+            df = self.detect_liquidity_sweep(df, window=5)
             df = self.detect_demand_supply_zones(df)
             processed_data[tf] = df
             

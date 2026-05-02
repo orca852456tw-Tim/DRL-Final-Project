@@ -55,95 +55,110 @@ def main():
     signals = signal_gen.generate_signals(htf, ltf)
     logger.info(f"Generated {len(signals)} raw BUY signals.")
     
-    # 5. Risk Filter & Trade Execution Simulation
-    risk_filter = RiskFilter(CURRENT_RISK_PROFILE)
-    trade_log = []
-    account_balance = INITIAL_CAPITAL
+    from config import RISK_SETTINGS
     
-    active_trade = False
-    
-    for sig in signals:
-        if active_trade:
-            continue # 不允許同時持有多筆單
-            
-        entry_date = sig['date']
-        entry_price = float(sig['entry'])
-        stop_loss_zone = float(sig['stop_loss'])
-        
-        # Get ATR at entry
-        atr_value = float(ltf.loc[entry_date, atr_col])
-        if pd.isna(atr_value):
-            atr_value = 0.0
-            
-        pos_info = risk_filter.calculate_position(account_balance, entry_price, stop_loss_zone, atr_value)
-        shares = pos_info['shares']
-        final_stop_loss = pos_info['final_stop_loss']
-        
-        if shares <= 0:
-            continue
-            
-        # 簡易出場邏輯：固定風險報酬比 RR = 1:2
-        risk = entry_price - final_stop_loss
-        take_profit = entry_price + (2 * risk)
-        
-        active_trade = True
-        logger.debug(f"Entering Trade on {entry_date} at {entry_price}, Stop: {final_stop_loss}, TP: {take_profit}, Shares: {shares}")
-        
-        # Walk forward to find exit
-        trade_closed = False
-        start_idx = ltf.index.get_loc(entry_date)
-        for i in range(start_idx + 1, len(ltf)):
-            bar = ltf.iloc[i]
-            exit_date = ltf.index[i]
-            
-            # Check Stop Loss
-            if bar['Low'] <= final_stop_loss:
-                exit_price = final_stop_loss
-                pnl = (exit_price - entry_price) * shares
-                return_pct = pnl / account_balance
-                account_balance += pnl
-                trade_log.append({
-                    'entry_date': entry_date, 'exit_date': exit_date,
-                    'entry_price': entry_price, 'exit_price': exit_price,
-                    'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
-                    'balance': account_balance, 'result': 'LOSS'
-                })
-                trade_closed = True
-                break
-                
-            # Check Take Profit
-            elif bar['High'] >= take_profit:
-                exit_price = take_profit
-                pnl = (exit_price - entry_price) * shares
-                return_pct = pnl / account_balance
-                account_balance += pnl
-                trade_log.append({
-                    'entry_date': entry_date, 'exit_date': exit_date,
-                    'entry_price': entry_price, 'exit_price': exit_price,
-                    'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
-                    'balance': account_balance, 'result': 'WIN'
-                })
-                trade_closed = True
-                break
-                
-        if not trade_closed:
-            # End of data, close at last price
-            exit_price = float(ltf.iloc[-1]['Close'])
-            exit_date = ltf.index[-1]
-            pnl = (exit_price - entry_price) * shares
-            return_pct = pnl / account_balance
-            account_balance += pnl
-            trade_log.append({
-                'entry_date': entry_date, 'exit_date': exit_date,
-                'entry_price': entry_price, 'exit_price': exit_price,
-                'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
-                'balance': account_balance, 'result': 'END'
-            })
-        active_trade = False
-
-    # 6. Report
+    # 5. Risk Filter & Trade Execution Simulation (Multi-Scenario)
     report_mod = ReportModule()
-    metrics = report_mod.generate_report(trade_log, INITIAL_CAPITAL)
+    
+    for profile_name in RISK_SETTINGS.keys():
+        logger.info(f"\n========== [{profile_name}] 績效報告 ==========")
+        risk_filter = RiskFilter(profile_name)
+        trade_log = []
+        account_balance = INITIAL_CAPITAL
+        
+        active_trade = False
+        
+        for sig in signals:
+            if active_trade:
+                continue # 不允許同時持有多筆單
+                
+            entry_date = sig['date']
+            entry_price = float(sig['entry'])
+            stop_loss_zone = float(sig['stop_loss'])
+            
+            # Get ATR at entry
+            atr_value = float(ltf.loc[entry_date, atr_col])
+            if pd.isna(atr_value):
+                atr_value = 0.0
+                
+            pos_info = risk_filter.calculate_position(account_balance, entry_price, stop_loss_zone, atr_value)
+            shares = pos_info['shares']
+            final_stop_loss = pos_info['final_stop_loss']
+            
+            if shares <= 0:
+                continue
+                
+            take_profit = float(sig['target_tp'])
+            
+            active_trade = True
+            logger.debug(f"Entering Trade on {entry_date} at {entry_price}, Stop: {final_stop_loss}, TP: {take_profit}, Shares: {shares}")
+            
+            # Walk forward to find exit
+            trade_closed = False
+            start_idx = ltf.index.get_loc(entry_date)
+            for i in range(start_idx + 1, len(ltf)):
+                bar = ltf.iloc[i]
+                exit_date = ltf.index[i]
+                
+                # Check Stop Loss
+                if bar['Low'] <= final_stop_loss:
+                    exit_price = final_stop_loss
+                    pnl = (exit_price - entry_price) * shares
+                    return_pct = pnl / account_balance
+                    account_balance += pnl
+                    trade_log.append({
+                        'entry_date': entry_date, 'exit_date': exit_date,
+                        'entry_price': entry_price, 'exit_price': exit_price,
+                        'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
+                        'balance': account_balance, 'result': 'LOSS',
+                        'zone_top': sig['zone_top'], 'zone_bottom': sig['zone_bottom'],
+                        'reclaim_price': sig['reclaim_price'], 'stop_loss_price': final_stop_loss,
+                        'take_profit_price': take_profit, 'risk_pct': risk_filter.risk_pct,
+                        'has_sweep': sig['has_sweep']
+                    })
+                    trade_closed = True
+                    break
+                    
+                # Check Take Profit
+                elif bar['High'] >= take_profit:
+                    exit_price = take_profit
+                    pnl = (exit_price - entry_price) * shares
+                    return_pct = pnl / account_balance
+                    account_balance += pnl
+                    trade_log.append({
+                        'entry_date': entry_date, 'exit_date': exit_date,
+                        'entry_price': entry_price, 'exit_price': exit_price,
+                        'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
+                        'balance': account_balance, 'result': 'WIN',
+                        'zone_top': sig['zone_top'], 'zone_bottom': sig['zone_bottom'],
+                        'reclaim_price': sig['reclaim_price'], 'stop_loss_price': final_stop_loss,
+                        'take_profit_price': take_profit, 'risk_pct': risk_filter.risk_pct,
+                        'has_sweep': sig['has_sweep']
+                    })
+                    trade_closed = True
+                    break
+                    
+            if not trade_closed:
+                # End of data, close at last price
+                exit_price = float(ltf.iloc[-1]['Close'])
+                exit_date = ltf.index[-1]
+                pnl = (exit_price - entry_price) * shares
+                return_pct = pnl / account_balance
+                account_balance += pnl
+                trade_log.append({
+                    'entry_date': entry_date, 'exit_date': exit_date,
+                    'entry_price': entry_price, 'exit_price': exit_price,
+                    'shares': shares, 'pnl': pnl, 'return_pct': return_pct,
+                    'balance': account_balance, 'result': 'END',
+                    'zone_top': sig['zone_top'], 'zone_bottom': sig['zone_bottom'],
+                    'reclaim_price': sig['reclaim_price'], 'stop_loss_price': final_stop_loss,
+                    'take_profit_price': take_profit, 'risk_pct': risk_filter.risk_pct,
+                    'has_sweep': sig['has_sweep']
+                })
+            active_trade = False
+
+        # 6. Report
+        metrics = report_mod.generate_report(trade_log, INITIAL_CAPITAL)
     
 if __name__ == "__main__":
     main()
