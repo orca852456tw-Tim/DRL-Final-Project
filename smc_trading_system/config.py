@@ -3,7 +3,8 @@ Configuration Management
 """
 
 # --- 基本回測設定 ---
-TICKER = '2330' # 若後續測試 yfinance，可能需要改為 '2330.TW'
+TICKER = '2330.TW' # 若後續測試 yfinance，可能需要改為 '2330.TW'
+WATCHLIST = ['2330.TW', '2317.TW', '2454.TW', '2308.TW', '2881.TW']
 START_DATE = '2021-01-01'
 END_DATE = '2024-12-31'
 INITIAL_CAPITAL = 1000000.0
