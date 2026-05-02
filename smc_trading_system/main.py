@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 import pandas as pd
 import pandas_ta as ta
 import yfinance as yf
@@ -19,6 +20,11 @@ logger = setup_logger("Main")
 
 def main():
     logger.info("Starting SMC Trading System Backtest...")
+    
+    # 強制將輸出紀錄到 report_output.md，並指定 utf-8 編碼以避免中文亂碼
+    file_handler = logging.FileHandler('report_output.md', mode='w', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(message)s'))
+    logging.getLogger().addHandler(file_handler)
     
     data_mod = DataModule(TICKER, START_DATE, END_DATE)
     
