@@ -160,5 +160,28 @@ def main():
         # 6. Report
         metrics = report_mod.generate_report(trade_log, INITIAL_CAPITAL)
     
+    # 7. Plotting
+    from src.plot_module import plot_trade_chart
+    from datetime import timedelta
+    
+    if trade_log:
+        logger.info("Generating Backtest Chart...")
+        first_trade = trade_log[0]['entry_date']
+        last_trade = trade_log[-1]['exit_date']
+        
+        start_plot_date = first_trade - timedelta(days=20)
+        end_plot_date = last_trade + timedelta(days=20)
+        
+        plot_df = ltf[(ltf.index >= start_plot_date) & (ltf.index <= end_plot_date)]
+        
+        zones = []
+        for t in trade_log:
+            zone = [t['zone_top'], t['zone_bottom']]
+            if zone not in zones:
+                zones.append(zone)
+                
+        plot_trade_chart(plot_df, trade_log, zones)
+        logger.info("Chart saved to backtest_result.html")
+
 if __name__ == "__main__":
     main()
