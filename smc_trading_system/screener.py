@@ -15,16 +15,26 @@ from utils.logger import setup_logger
 
 logger = setup_logger("Screener")
 
+import logging
+
 def main():
+    # 強制將雷達輸出紀錄到 screener_output.md，並指定 utf-8 編碼
+    file_handler = logging.FileHandler('screener_output.md', mode='w', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter('%(message)s'))
+    logging.getLogger().addHandler(file_handler)
+
     logger.info("Starting Multi-Asset SMC Screener...")
     logger.info(f"Watchlist: {WATCHLIST}")
     
     # 針對終端機輸出修正編碼 (相容 Windows)
-    sys.stdout.reconfigure(encoding='utf-8')
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
     
-    print("=" * 60)
-    print("今日 SMC 掃描雷達報告")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("今日 SMC 掃描雷達報告")
+    logger.info("=" * 60)
     
     found_targets = False
     
@@ -84,22 +94,22 @@ def main():
                     }
                     ticker_name = name_map.get(ticker, ticker)
                     
-                    print(f"\n[!!! 狙擊目標 !!!] {ticker} {ticker_name} - 已完成 Sweep 與 Reclaim")
-                    print(f"   => 觸發日期：{last_sig_date.strftime('%Y-%m-%d')}")
-                    print(f"   => 狀態：價格位於大級別需求區 [{zone_top}-{zone_bottom}]")
+                    logger.info(f"\n[!!! 狙擊目標 !!!] {ticker} {ticker_name} - 已完成 Sweep 與 Reclaim")
+                    logger.info(f"   => 觸發日期：{last_sig_date.strftime('%Y-%m-%d')}")
+                    logger.info(f"   => 狀態：價格位於大級別需求區 [{zone_top}-{zone_bottom}]")
                     sweep_msg = "是" if last_sig.get('has_sweep') else "否"
-                    print(f"   => 流動性掃蕩 (Sweep)：{sweep_msg}")
-                    print(f"   => 建議進場價：{entry_price}")
-                    print(f"   => 動態停利目標：{tp}")
-                    print(f"   => 結構停損點：{sl}")
+                    logger.info(f"   => 流動性掃蕩 (Sweep)：{sweep_msg}")
+                    logger.info(f"   => 建議進場價：{entry_price}")
+                    logger.info(f"   => 動態停利目標：{tp}")
+                    logger.info(f"   => 結構停損點：{sl}")
                     
         except Exception as e:
             logger.error(f"Error processing {ticker}: {e}")
             
     if not found_targets:
-        print("\n目前無符合「高勝率 SMC 共振」之狙擊目標。")
+        logger.info("\n目前無符合「高勝率 SMC 共振」之狙擊目標。")
         
-    print("\n" + "=" * 60)
+    logger.info("\n" + "=" * 60)
 
 if __name__ == "__main__":
     main()
