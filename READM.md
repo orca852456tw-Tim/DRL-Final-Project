@@ -98,3 +98,29 @@ smc_trading_system/
 └── utils/                  # 通用工具
     ├── __init__.py
     └── logger.py           # 日誌系統設定 (設定 Log 輸出格式與檔案儲存路徑)
+
+---
+
+## 五、 最新更新：DRL 理論基礎與分析模式 (2026-05 最新進展)
+
+本專案現已擴充整合「深度強化學習 (DRL)」與進階的「儀表板 (Dashboard) 系統」，其理論與實作進度如下：
+
+### 1. 理論基礎 (Theoretical Foundation)
+* **Smart Money Concepts (SMC)**：除了既有的 FVG、Swing High/Low 外，進一步強調「流動性掃蕩 (Liquidity Sweep)」的狙擊手特質，系統在大多數時間會處於「觀望 (Hold)」狀態，拒絕頻繁交易，僅在高勝率結構出現時介入。
+* **深度強化學習 (Deep Reinforcement Learning, DRL)**：
+  * 結合 Actor-Critic 架構，使 AI 模型能透過環境的回饋不斷最佳化決策。
+  * **PPO (Proximal Policy Optimization)**：限制單次學習幅度，確保訓練收斂穩健。
+  * **SAC (Soft Actor-Critic)**：鼓勵模型進行高探索性 (Entropy Maximization)，以適應極端盤勢變化。
+  * **DQN (Deep Q-Network)**：專注於尋找絕對價值最大化的離散交易動作。
+
+### 2. 分析模式 (Analysis Models)
+* **風險管理與多情境回測**：支援保守型、穩健型、積極型，並結合 ATR (Average True Range) 進行動態停損位設定。
+* **蒙地卡羅模擬 (Monte Carlo Simulation)**：基於歷史勝率、平均獲利/虧損百分比與年均交易次數，執行 1,000 次隨機漫步模型，預測未來 3 年的最佳 (95th)、預期 (50th) 與最差 (5th) 資產變化情境。
+
+### 3. 目前實作情況 (Current Implementation Status)
+* **核心回測引擎 (main.py)**：已完成 4 年歷史數據 (2021-2024) 驗證，並整合了蒙地卡羅未來績效預測功能。
+* **視覺化儀表板 (demo_dashboard.html / drl_dashboard.html)**：
+  * 成功將單純的終端機文字報告升級為 **「機構級 Web 儀表板」**。
+  * 實作了深色模式、玻璃擬態 (Glassmorphism) 的高質感互動設計。
+  * 儀表板支援：左側參數控制 (標的、模型、風險屬性、資金)、動態載入動畫、三大 KPI 橫幅、Chart.js 決策與淨值圖表，以及底部的 SMC/DRL 深度解析卡片。
+* **開發與版本控制**：所有源碼、儀表板模版與操作日誌均已確實版控並上傳至 GitHub (origin/main)。
