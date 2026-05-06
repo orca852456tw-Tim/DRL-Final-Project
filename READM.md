@@ -7,8 +7,8 @@
 * 語言：Python 3.11+
 * 資料處理：`pandas`, `numpy`
 * 技術指標：`pandas-ta`, `scipy`
-* 資料來源：`FinMind` (需能取得台股日內分 K 以重組多時框資料)
-* 前端展現：初期先以 Terminal / Jupyter 腳本驗證邏輯，後續擴充 Streamlit UI。
+* 資料來源：`yfinance` (免費抓取歷史報價)
+* 前端展現：獨立的 HTML/CSS/JS 機構級量化分析儀表板 (`drl_dashboard.html` 與 `demo_dashboard.html`)。
 
 ---
 
@@ -23,10 +23,9 @@
   * `initial_capital` (float): 1,000,000
   * `risk_profile` (str): '保守型' | '穩健型' | '積極型'
 * **Data Fetching & Resampling:**
-  1. 使用 API 取得歷史日K (Daily) 與歷史分K (如 5m 或 1m)。
-  2. 利用 Pandas `.resample()` 將分K嚴格依照台股交易時間 (09:00-13:30) 重新聚合為 `1H`, `2H`, `4H`，排除盤後與休市的空白資料。
-  3. 將日線聚合為週線 `1W`。
-* **Output:** 回傳包含各時框 DataFrame 的 Dict：`{'1W': df_1W, '1D': df_1D, '4H': df_4H, '2H': df_2H, '1H': df_1H}`，確保皆包含 OHLCV 且索引為 Datetime。
+  1. 使用 API (`yfinance`) 取得歷史日K (Daily) 資料。
+  2. 因應免費 API 長期回測 (例如 4 年) 的資料長度限制，採用 `1D` 為基礎時框，利用 Pandas `.resample()` 將日線聚合為週線 `1W` 作為高階時框。
+* **Output:** 回傳包含各時框 DataFrame 的 Dict：`{'1W': df_1W, '1D': df_1D}`，確保皆包含 OHLCV 且索引為 Datetime。
 
 ### 模組 2：SMC Detection Module (特徵工程)
 在所有時框的 DataFrame 上標註 SMC 結構。供需區/缺口必須以 `[上限價格, 下限價格]` 的形式儲存。
@@ -89,15 +88,18 @@ smc_trading_system/
 │
 ├── src/                    # 核心業務模組
 │   ├── __init__.py
-│   ├── data_module.py      # 負責 API 串接、資料清理與 Multi-Timeframe 重採樣
+│   ├── data_module.py      # 負責 yfinance 串接與 Multi-Timeframe (1D/1W) 重採樣
 │   ├── smc_detection.py    # 負責 FVG、Swing High/Low 與 Demand/Supply Zone 特徵運算
 │   ├── signal_gen.py       # 負責實作「承接 + 收復」的兩階段狀態機邏輯
 │   ├── risk_filter.py      # 負責資金控管、ATR 計算與實際下單部位計算
-│   └── report_module.py    # 負責交易日誌統整與績效指標 (Sharpe, MDD) 計算
+│   ├── report_module.py    # 負責統整日誌、Monte Carlo 與績效計算
+│   └── plot_module.py      # 負責 Plotly 圖表生成與儀表板渲染
 │
+├── demo_dashboard.html     # 回測結果視覺化儀表板
+├── drl_dashboard.html      # 互動式 DRL 操控與洞察儀表板
 └── utils/                  # 通用工具
     ├── __init__.py
-    └── logger.py           # 日誌系統設定 (設定 Log 輸出格式與檔案儲存路徑)
+    └── logger.py           # 日誌系統設定
 
 ---
 
