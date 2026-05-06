@@ -98,7 +98,6 @@ smc_trading_system/
 ├── demo_dashboard.html     # 回測結果視覺化儀表板
 ├── drl_dashboard.html      # 互動式 DRL 操控與洞察儀表板
 └── utils/                  # 通用工具
-    ├── __init__.py
     └── logger.py           # 日誌系統設定
 
 ---
