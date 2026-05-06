@@ -9,6 +9,44 @@ class ReportModule:
     def __init__(self):
         pass
 
+    def calculate_cagr(self, start_capital: float, end_capital: float, years: float) -> float:
+        """Calculate Compound Annual Growth Rate."""
+        if start_capital <= 0 or years <= 0:
+            return 0.0
+        return (max(end_capital / start_capital, 0) ** (1 / years)) - 1
+
+    def run_monte_carlo(self, win_rate: float, avg_win_pct: float, avg_loss_pct: float, trades_per_year: int, years: int = 3, simulations: int = 1000) -> Dict[str, float]:
+        """Run Monte Carlo simulation for future performance."""
+        logger.info(f"Running Monte Carlo simulation for {years} years...")
+        np.random.seed(42) # For reproducibility
+        
+        results = []
+        for _ in range(simulations):
+            capital = 1.0 # Start with 1.0 as base multiplier
+            total_trades = trades_per_year * years
+            
+            # Generate random results based on win rate
+            random_draws = np.random.rand(total_trades)
+            for draw in random_draws:
+                if draw < win_rate:
+                    capital *= (1 + avg_win_pct)
+                else:
+                    capital *= (1 - abs(avg_loss_pct))
+            results.append(capital)
+            
+        results = np.array(results)
+        
+        # Calculate percentiles
+        best = np.percentile(results, 95)
+        median = np.median(results)
+        worst = np.percentile(results, 5)
+        
+        return {
+            'best_case_95th': best,
+            'expected_50th': median,
+            'worst_case_5th': worst
+        }
+
     def generate_report(self, trade_log: List[Dict[str, Any]], initial_capital: float, hide_ledger: bool = False) -> Dict[str, float]:
         """
         Calculate metrics like Total Return, MDD, Win Rate, Sharpe Ratio.

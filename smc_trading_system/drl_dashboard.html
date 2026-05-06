@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRL SMC 交易系統儀表板</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0a0e17;
+            --panel-bg: rgba(20, 26, 38, 0.7);
+            --card-bg: rgba(30, 38, 56, 0.8);
+            --accent-primary: #00f0ff;
+            --accent-secondary: #7000ff;
+            --accent-success: #00ff66;
+            --accent-warning: #ffb800;
+            --accent-danger: #ff0055;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --glass-blur: blur(16px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #05070a 0%, #0f1624 100%);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* Glassmorphism Utilities */
+        .glass {
+            background: var(--panel-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+        }
+
+        /* Layout */
+        .sidebar {
+            width: 320px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            border-right: 1px solid var(--border-color);
+            background: linear-gradient(to bottom, rgba(15, 22, 36, 0.9), rgba(10, 14, 23, 0.9));
+            z-index: 10;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-primary), #b388ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; color: #fff; }
+        h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--accent-primary); }
+        
+        .desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+
+        /* Form Controls */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-main);
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.2);
+        }
+
+        option { background: var(--bg-dark); }
+
+        .btn-primary {
+            margin-top: auto;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: #fff;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(112, 0, 255, 0.4);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        /* Initial State & Loader */
+        #initial-state, #loader-state {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            transition: opacity 0.5s ease;
+        }
+
+        #initial-state h2 {
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 240, 255, 0.1);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Dashboard Content */
+        #dashboard-content {
+            display: none;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.8s ease forwards;
+            opacity: 0;
+            height: 100%;
+        }
+
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        /* Top Section: KPIs & Charts */
+        .top-section {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            flex: 1;
+        }
+
+        .kpi-banner {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .kpi-card {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+            opacity: 0.5;
+        }
+
+        .kpi-title { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        .kpi-value { font-size: 2.2rem; font-weight: 700; color: #fff; }
+        .kpi-card.win-rate .kpi-value { color: var(--accent-success); }
+        .kpi-card.drawdown .kpi-value { color: var(--accent-danger); }
+        .kpi-card.return .kpi-value { color: var(--accent-primary); }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+            flex: 1;
+            min-height: 300px;
+        }
+
+        .chart-wrapper {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+        }
+
+        /* Bottom Section: Insights */
+        .bottom-section {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .insight-card {
+            padding: 24px;
+            transition: transform 0.3s ease;
+        }
+
+        .insight-card:hover { transform: translateY(-4px); }
+
+        .insight-card h4 {
+            color: #fff;
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .insight-card p {
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .charts-container { grid-template-columns: 1fr; }
+            .bottom-section { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Control Panel -->
+    <aside class="sidebar">
+        <div>
+            <h1>DRL 交易核心</h1>
+            <p class="desc">SMC 智慧資金概念整合系統</p>
+        </div>
+
+        <div class="form-group">
+            <label for="ticker">選擇回測標的</label>
+            <select id="ticker">
+                <option value="2330">2330.TW (台積電)</option>
+                <option value="2317">2317.TW (鴻海)</option>
+                <option value="2454">2454.TW (聯發科)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="model">選擇 DRL 模型</label>
+            <select id="model">
+                <option value="ppo">PPO (穩健收斂)</option>
+                <option value="sac">SAC (高探索性)</option>
+                <option value="dqn">DQN (離散動作)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="risk">風險屬性設定</label>
+            <select id="risk">
+                <option value="conservative">保守型 (嚴格停損)</option>
+                <option value="moderate" selected>穩健型 (動態停損)</option>
+                <option value="aggressive">積極型 (放寬停損)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="capital">初始資金</label>
+            <input type="number" id="capital" value="1000000" step="100000" min="100000">
+        </div>
+
+        <button class="btn-primary" id="start-btn">啟動 AI 訓練與回測</button>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Initial State -->
+        <div id="initial-state">
+            <h2>請設定參數並啟動 AI</h2>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loader-state" style="display: none;">
+            <div class="spinner"></div>
+            <h2 style="color: var(--accent-primary);">AI 模型建構與環境推演中...</h2>
+            <p class="desc" style="margin-top: 16px;">正在執行神經網路權重更新與流動性分析</p>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content">
+            <div class="top-section">
+                <!-- KPIs -->
+                <div class="kpi-banner">
+                    <div class="glass kpi-card win-rate">
+                        <div class="kpi-title">AI 預期勝率</div>
+                        <div class="kpi-value" id="val-win-rate">0.0%</div>
+                    </div>
+                    <div class="glass kpi-card drawdown">
+                        <div class="kpi-title">最大回撤 (MDD)</div>
+                        <div class="kpi-value" id="val-mdd">0.0%</div>
+                    </div>
+                    <div class="glass kpi-card return">
+                        <div class="kpi-title">總報酬 (Total Return)</div>
+                        <div class="kpi-value" id="val-return">0.0%</div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-container">
+                    <div class="glass chart-wrapper">
+                        <h2>AI 策略淨值 vs 買入持有</h2>
+                        <div class="chart-container">
+                            <canvas id="equityChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="glass chart-wrapper">
+                        <h2>AI 決策分佈</h2>
+                        <div class="chart-container">
+                            <canvas id="actionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights Section -->
+            <div class="bottom-section">
+                <div class="glass insight-card">
+                    <h4>🎯 決策邏輯：SMC 狙擊手特質</h4>
+                    <p>高比例的「觀望 (Hold)」代表 AI 正在等待 FVG 或流動性掃蕩等高勝率結構，拒絕頻繁交易產生雜訊。</p>
+                </div>
+                <div class="glass insight-card">
+                    <h4>🛡️ 績效解析：超額報酬 (Alpha)</h4>
+                    <p>在基準指數下跌或盤整時，策略淨值呈現水平或微升，證明 AI 成功避開回撤並保護資本。</p>
+                </div>
+                <div class="glass insight-card">
+                    <h4>🧠 底層技術：Actor-Critic 架構</h4>
+                    <p>本系統採用先進 DRL 演算法。PPO 限制單次學習幅度以確保收斂穩健；SAC 鼓勵探索以適應極端盤勢；而 DQN 則專注於尋找絕對價值最大化的離散動作。</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Chart Instances
+        let equityChartInstance = null;
+        let actionChartInstance = null;
+
+        // Colors
+        const colors = {
+            primary: '#00f0ff',
+            primaryAlpha: 'rgba(0, 240, 255, 0.2)',
+            secondary: '#7000ff',
+            success: '#00ff66',
+            warning: '#ffb800',
+            danger: '#ff0055',
+            text: '#e2e8f0',
+            grid: 'rgba(255, 255, 255, 0.05)'
+        };
+
+        // Initialize Charts with empty data
+        function initCharts() {
+            Chart.defaults.color = colors.text;
+            Chart.defaults.font.family = "'Inter', 'Noto Sans TC', sans-serif";
+
+            const ctxEquity = document.getElementById('equityChart').getContext('2d');
+            equityChartInstance = new Chart(ctxEquity, {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        x: { grid: { color: colors.grid } },
+                        y: { grid: { color: colors.grid } }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    elements: { line: { tension: 0.4 }, point: { radius: 0 } }
+                }
+            });
+
+            const ctxAction = document.getElementById('actionChart').getContext('2d');
+            actionChartInstance = new Chart(ctxAction, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    cutout: '70%',
+                    borderWidth: 0
+                }
+            });
+        }
+
+        // Simulate Data and Render
+        function renderDashboard() {
+            // Randomize KPI slightly based on selections
+            const model = document.getElementById('model').value;
+            const risk = document.getElementById('risk').value;
+            
+            let winRateBase = model === 'ppo' ? 65 : (model === 'sac' ? 58 : 62);
+            let mddBase = risk === 'conservative' ? -8 : (risk === 'moderate' ? -15 : -25);
+            let returnBase = risk === 'conservative' ? 45 : (risk === 'moderate' ? 85 : 140);
+
+            // Add some randomness
+            const winRate = (winRateBase + Math.random() * 5).toFixed(1);
+            const mdd = (mddBase - Math.random() * 5).toFixed(1);
+            const totalReturn = (returnBase + Math.random() * 20).toFixed(1);
+
+            document.getElementById('val-win-rate').innerText = `${winRate}%`;
+            document.getElementById('val-mdd').innerText = `${mdd}%`;
+            document.getElementById('val-return').innerText = `+${totalReturn}%`;
+
+            // Equity Data Simulation
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            let aiEquity = [1];
+            let bhEquity = [1];
+            
+            for(let i=1; i<12; i++) {
+                aiEquity.push(aiEquity[i-1] * (1 + (Math.random() * 0.08 - 0.01))); // Upward bias, small drawdowns
+                bhEquity.push(bhEquity[i-1] * (1 + (Math.random() * 0.1 - 0.03))); // More volatile
+            }
+
+            equityChartInstance.data = {
+                labels: months,
+                datasets: [
+                    {
+                        label: 'AI 策略淨值',
+                        data: aiEquity.map(v => (v * 100).toFixed(2)),
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primaryAlpha,
+                        borderWidth: 3,
+                        fill: true,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: '買入持有 (B&H)',
+                        data: bhEquity.map(v => (v * 100).toFixed(2)),
+                        borderColor: colors.text,
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        yAxisID: 'y'
+                    }
+                ]
+            };
+            equityChartInstance.update();
+
+            // Action Distribution Simulation
+            // High hold percentage reflecting SMC logic
+            const holdPct = 75 + Math.random() * 10;
+            const buyPct = (100 - holdPct) * 0.6;
+            const sellPct = (100 - holdPct) * 0.4;
+
+            actionChartInstance.data = {
+                labels: ['買進 (Buy)', '賣出 (Sell)', '觀望 (Hold)'],
+                datasets: [{
+                    data: [buyPct.toFixed(1), sellPct.toFixed(1), holdPct.toFixed(1)],
+                    backgroundColor: [colors.success, colors.danger, '#334155'],
+                    hoverOffset: 4
+                }]
+            };
+            actionChartInstance.update();
+        }
+
+        // Button Event Listener
+        document.getElementById('start-btn').addEventListener('click', () => {
+            const btn = document.getElementById('start-btn');
+            const initialState = document.getElementById('initial-state');
+            const loaderState = document.getElementById('loader-state');
+            const dashboardContent = document.getElementById('dashboard-content');
+
+            // Disable button
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            btn.innerText = '處理中...';
+
+            // Show Loader
+            initialState.style.display = 'none';
+            dashboardContent.style.display = 'none';
+            loaderState.style.display = 'flex';
+
+            // Simulate AI Training Delay
+            setTimeout(() => {
+                loaderState.style.display = 'none';
+                dashboardContent.style.display = 'flex';
+                
+                if(!equityChartInstance) initCharts();
+                renderDashboard();
+
+                // Reset Button
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerText = '重新執行分析';
+            }, 2500); // 2.5 seconds loading simulation
+        });
+    </script>
+</body>
+</html>

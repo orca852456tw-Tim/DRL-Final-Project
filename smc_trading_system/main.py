@@ -166,12 +166,31 @@ def main():
         # 6. Report
         metrics = report_mod.generate_report(trade_log, INITIAL_CAPITAL)
     
+        # Calculate extra stats for Monte Carlo
+        if trade_log:
+            df_trades = pd.DataFrame(trade_log)
+            win_trades = df_trades[df_trades['result'] == 'WIN']
+            loss_trades = df_trades[df_trades['result'] == 'LOSS']
+            
+            avg_win_pct = win_trades['return_pct'].mean() if not win_trades.empty else 0.0
+            avg_loss_pct = loss_trades['return_pct'].mean() if not loss_trades.empty else 0.0
+            win_rate = metrics.get('Win Rate (%)', 0.0) / 100.0
+            
+            backtest_years = (ltf.index[-1] - ltf.index[0]).days / 365.25
+            cagr = report_mod.calculate_cagr(INITIAL_CAPITAL, account_balance, backtest_years)
+            trades_per_year = int(len(trade_log) / backtest_years) if backtest_years > 0 else 0
+            
+            mc_results = report_mod.run_monte_carlo(win_rate, avg_win_pct, avg_loss_pct, trades_per_year, years=3, simulations=1000)
+        else:
+            cagr = 0.0
+            mc_results = {'best_case_95th': 0, 'expected_50th': 0, 'worst_case_5th': 0}
+
     # 7. Plotting
-    from src.plot_module import plot_trade_chart
+    from src.plot_module import generate_dashboard_html
     from datetime import timedelta
     
     if trade_log:
-        logger.info("Generating Backtest Chart...")
+        logger.info("Generating HTML Dashboard...")
         first_trade = trade_log[0]['entry_date']
         last_trade = trade_log[-1]['exit_date']
         
@@ -186,8 +205,9 @@ def main():
             if zone not in zones:
                 zones.append(zone)
                 
-        plot_trade_chart(plot_df, trade_log, zones)
-        logger.info("Chart saved to backtest_result.html")
+        # Generate the dashboard (using the last profile evaluated, or modify as needed)
+        generate_dashboard_html(plot_df, trade_log, zones, profile_name, cagr, mc_results)
+        logger.info("Dashboard saved to demo_dashboard.html")
 
 if __name__ == "__main__":
     main()
