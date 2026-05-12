@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRL SMC Trading Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1a1c2c 0%, #4a192c 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .glass-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 20px;
+            width: 90%;
+            max-width: 1200px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            background: linear-gradient(to right, #ff8a00, #e52e71);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        input, select {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            border-color: #ff8a00;
+        }
+
+        .kpi-container {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .kpi-card {
+            flex: 1;
+            min-width: 200px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .kpi-title {
+            font-size: 1em;
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ffcc;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glass-container">
+        <h1>DRL SMC 智能交易儀表板</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="capital">初始資金 (Initial Capital)</label>
+                <input type="number" id="capital" value="1000000" min="10000" step="10000">
+            </div>
+            <div class="control-group">
+                <label for="style">投資風格 (Investment Style)</label>
+                <select id="style">
+                    <option value="conservative">保守型 (Conservative)</option>
+                    <option value="moderate" selected>穩健型 (Moderate)</option>
+                    <option value="aggressive">積極型 (Aggressive)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-title">預期年化報酬 (CAGR)</div>
+                <div class="kpi-value" id="kpi-cagr">--%</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">勝率 (Win Rate)</div>
+                <div class="kpi-value" id="kpi-winrate">--%</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">最大回撤 (Max Drawdown)</div>
+                <div class="kpi-value" id="kpi-mdd" style="color: #ff4444;">--%</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="projectionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Simulation Parameters based on style
+        const styleParams = {
+            conservative: { cagr: 0.12, volatility: 0.08, winRate: 65, mdd: 8 },
+            moderate: { cagr: 0.22, volatility: 0.15, winRate: 55, mdd: 15 },
+            aggressive: { cagr: 0.35, volatility: 0.25, winRate: 45, mdd: 28 }
+        };
+
+        let projectionChart = null;
+
+        function generateMonteCarloPaths(initialCapital, styleParam, years=3, numPaths=3) {
+            const days = years * 252;
+            const dt = 1 / 252;
+            const mu = styleParam.cagr;
+            const sigma = styleParam.volatility;
+            
+            const paths = [];
+            for (let i = 0; i < numPaths; i++) {
+                const path = [initialCapital];
+                let current = initialCapital;
+                for (let d = 1; d <= days; d++) {
+                    // Geometric Brownian Motion step
+                    const drift = (mu - 0.5 * sigma * sigma) * dt;
+                    // Box-Muller transform for normal distribution
+                    let u1 = Math.random();
+                    let u2 = Math.random();
+                    const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+                    const shock = sigma * Math.sqrt(dt) * z;
+                    current = current * Math.exp(drift + shock);
+                    
+                    // Only save monthly data points to keep chart light
+                    if (d % 21 === 0) {
+                        path.push(current);
+                    }
+                }
+                paths.push(path);
+            }
+            return paths;
+        }
+
+        function updateDashboard() {
+            const capital = parseFloat(document.getElementById('capital').value);
+            const style = document.getElementById('style').value;
+            const params = styleParams[style];
+
+            // Update KPIs
+            document.getElementById('kpi-cagr').innerText = (params.cagr * 100).toFixed(1) + '%';
+            document.getElementById('kpi-winrate').innerText = params.winRate + '%';
+            document.getElementById('kpi-mdd').innerText = '-' + params.mdd + '%';
+
+            // Generate Paths
+            const paths = generateMonteCarloPaths(capital, params, 3, 3);
+            
+            // Labels (Months)
+            const labels = [];
+            for (let i = 0; i <= 36; i++) {
+                labels.push('Month ' + i);
+            }
+
+            const datasets = [
+                {
+                    label: '最佳情境 (95th Percentile)',
+                    data: paths[0].map(v => v * 1.2), // Simulated spread
+                    borderColor: 'rgba(0, 255, 204, 0.8)',
+                    backgroundColor: 'rgba(0, 255, 204, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4
+                },
+                {
+                    label: '預期情境 (50th Percentile)',
+                    data: paths[1],
+                    borderColor: 'rgba(255, 138, 0, 0.8)',
+                    backgroundColor: 'rgba(255, 138, 0, 0.1)',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.4
+                },
+                {
+                    label: '最差情境 (5th Percentile)',
+                    data: paths[2].map(v => v * 0.8), // Simulated spread
+                    borderColor: 'rgba(255, 68, 68, 0.8)',
+                    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4
+                }
+            ];
+
+            if (projectionChart) {
+                projectionChart.data.labels = labels;
+                projectionChart.data.datasets = datasets;
+                projectionChart.update();
+            } else {
+                const ctx = document.getElementById('projectionChart').getContext('2d');
+                Chart.defaults.color = '#ccc';
+                projectionChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: '未來 3 年資產投影圖 (Monte Carlo Simulation)',
+                                color: '#fff',
+                                font: { size: 16 }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(context.parsed.y);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            },
+                            x: {
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('capital').addEventListener('change', updateDashboard);
+        document.getElementById('capital').addEventListener('keyup', updateDashboard);
+        document.getElementById('style').addEventListener('change', updateDashboard);
+
+        // Initial Load
+        updateDashboard();
+    </script>
+</body>
+</html>
